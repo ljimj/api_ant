@@ -40,6 +40,8 @@ def natu_juridica(df_snr):
     """
     # 1 PREDIO CON TITULOS DE TRADICIÓN
     # ID NATURALEZA JURIDICA
+    # títulos originarios del Estado, identificado con los siguientes códigos (en cualquiera de sus anotaciones): 103, 104, 105, 106, 116
+    buscar = ['103', '104', '105', '106', '116', ]
 
 
 def encontrar_matriz_segregado(fmi, df_snr):
@@ -137,68 +139,7 @@ def comparaNombres(nombre1, nombre2):
         comparacion = "IGUAL"
     else:
         comparacion = "DESIGUAL"
-    """
-    nom1 = "".join(sorted(nombre1)).strip()
-    nom2 = "".join(sorted(nombre2)).strip()
 
-    if (nom1 == nom2): # Si el nombre 1 es igual al 2, el porcentaje de diferencia es 0%
-
-        comparacion = "IGUAL"
-        porcentaje = 100
-
-    else: # Si los nombres no son exactamente iguales haga lo siguiente:
-
-        nombre1 = nombre1.split() #Transformando el nombre en una lista de palabras
-        nombre2 = nombre2.split() #Transformando el nombre en una lista de palabras
-        wordsNom1 = len(nombre1) #Cantidad de palabras que tiene el nombre 1
-        wordsNom2 = len(nombre2) #Cantidad de palabras que tiene el nombre 2
-        
-        if (wordsNom1 == wordsNom2): #Si tiene la misma cantidad de palabras en los dos nombres haga lo siguiente:
-
-            caracDif = 0 #Inicializando. Cantidad de caracteres que no coinciden
-            largoTotal = 0 #Inicializando. Cantidad de caracteres del nombre con mayor cantidad de caracteres
-
-            for i in range(wordsNom1): #Bucle para recorrer cada uno de los caracteres según la longitud definida anteriormente
-
-                wordNom1 = nombre1[i] #asignando la palabra i del nombre1 a una variable
-                wordNom2 = nombre2[i] #asignando la palabra i del nombre2 a una variable
-
-                if(wordNom1 == wordNom2): #Si las palabras i de los dos nombres son iguales continue
-                    pass
-                else: #Si no son iguales
-
-                    # encontrando la palabra con más caracteres del nombre1 y nombre2
-                    lenNom1 = len(wordNom1)
-                    lenNom2 = len(wordNom2)
-                    
-                    if (lenNom1>lenNom2):
-                        largo = lenNom1 #Tiene mas caracteres nombre1
-                    else:
-                        largo = lenNom2 #Tiene mas caracteres nombre1
-
-                    for j in range(largo): #Bucle con rango de la palabra con mas caracteres
-
-                        try: # Intente comparar los caracteres j de las dos palabras
-                            if(wordNom1[j] == wordNom2[j]): #Si son iguales continue
-                                pass
-                            else: # Si no son iguales sume un uno a la cantidad de caracteres diferentes
-                                caracDif += 1
-
-                        except: # Si no se pudo comparar los caracteres j de las dos palabras (tienen diferentes cantidad de caracteres)
-                            # Sumar un uno a la cantidad de caracteres diferentes
-                            caracDif += 1
-                        
-                    largoTotal += largo #Determinando la cantidad de caracteres del nombre
-
-            porcentaje = caracDif/largoTotal #Determinando el porcentaje de 
-            if(porcentaje <= 0.15):
-                comparacion = "IGUAL"
-            else:
-                comparacion = "DESIGUAL"
-        else:
-            porcentaje = 1
-            comparacion = "DESIGUAL"
-        """
     return comparacion, porcentaje
         
         
