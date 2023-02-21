@@ -218,6 +218,8 @@ class AnalisisPredialIntegral(QgsProcessingAlgorithm):
             Función para encontrar los folios matriz y segregados
         """
         if(fmi != ""):
+
+            #SEGREGADOS
             fmiListM = df_snr['MATRICULA'].tolist() #Lista de todos los FMI existentes en SNR
             if(fmi in fmiListM): #si el fmi se encuentra en la lista continue
 
@@ -226,12 +228,12 @@ class AnalisisPredialIntegral(QgsProcessingAlgorithm):
                 list_snrS = set(df_snr_filterS['FOLIO DERIVADO'].tolist()) #Lista de segregados unicos
                 segregados = ""
                 for segre in list_snrS:
-                    if "-" in segre:
-                        segre = "0{}".format(segre)
-                    segregados += "{};".format(segre)
+                    if(segre != "" and segre != "nan"):
+                        segregados += "{};".format(segre)
             else:
                 segregados = ""
             
+            #MATRICES
             fmiListD = df_snr['FOLIO DERIVADO'].tolist()
             if(fmi in fmiListD):
                 #Operaciones para determinar los fmi matrices
@@ -239,42 +241,25 @@ class AnalisisPredialIntegral(QgsProcessingAlgorithm):
                 list_snrM = set(df_snr_filterM['MATRICULA'].tolist()) #Lista de Matrices
                 matrices = ""
                 for matri in list_snrM:
-                    if "-" in matri:
-                        matri = "0{}".format(matri)
-                    matrices += "{};".format(matri)
-                    
+                    if(matri != "" and matri != "nan"):
+                        matrices += "{};".format(matri)
             else:
                 matrices = ""
-
-            reemplazar = (("nan",""),(";;",""))
-            for a, b in reemplazar:
-                segregados = segregados.replace(a, b)
-                matrices = matrices.replace(a, b)
-                try:
-                    if (segregados[0] == ";"):
-                        segregados = segregados[1:]
-                except:
-                    pass
-                try:
-                    if (matrices[0] == ";"):
-                        matrices = matrices[1:]
-                except:
-                    pass
-                try:
-                    if (matrices[-1] == ";"):
-                        matrices = matrices[:-1]
-                except:
-                    pass
-                try:
-                    if (segregados[-1] == ";"):
-                        segregados = segregados[:-1]
-                except:
-                    pass
+            try:
+                if (matrices[-1] == ";"):
+                    matrices = matrices[:-1]
+            except:
+                pass
+            try:
+                if (segregados[-1] == ";"):
+                    segregados = segregados[:-1]
+            except:
+                pass
         else:
             matrices = "" 
             segregados = ""
 
-        return matrices, segregados
+        return pd.Series([matrices, segregados])
     
     def separarFolio(self, fmi):
         """
@@ -362,7 +347,8 @@ class AnalisisPredialIntegral(QgsProcessingAlgorithm):
         base.dataProvider().addAttributes([QgsField("id_predial", QVariant.String), 
                                             QgsField("numero_predial", QVariant.String), 
                                             QgsField("numero_predial_anterior", QVariant.String), 
-                                            QgsField("clasifica_suelo_pot", QVariant.String)
+                                            QgsField("clasifica_suelo_pot", QVariant.String),
+                                            QgsField("area_terreno_geografica", QVariant.Double)
                                             ])
         base.updateFields()
         #Adicionando el sistema de referencia EPSG:9377
@@ -371,12 +357,13 @@ class AnalisisPredialIntegral(QgsProcessingAlgorithm):
         base.setCrs(crs)
 
         #Creando un geoDataFrame de la nueva capa Base Catastral POT
-        gdf_baseCPOT = gpd.GeoDataFrame(columns=['id_predial', 'numero_predial', 'numero_predial_anterior', 'clasifica_suelo_pot', 'geom'], geometry='geom', crs="EPSG:9377")
+        gdf_baseCPOT = gpd.GeoDataFrame(columns=['id_predial', 'numero_predial', 'numero_predial_anterior', 'clasifica_suelo_pot', "area_terreno_geografica", 'geom'], geometry='geom', crs="EPSG:9377")
         
         featLayer = layer.getFeatures() #features de la capa inicial de base catastral
         for feat in featLayer:
 
             id = feat['id_predial'] #de la base inicial antes del intercept
+            area = feat['area_terreno_geografica']
             ced30 = feat['numero_predial'] #de la base inicial antes del intercept 
             ced20 = feat['numero_predial_anterior'] #de la base inicial antes del intercept
             df_filter = df[df['id_predial'] == id] # Filtrando la información del intercept por id predial
@@ -410,9 +397,10 @@ class AnalisisPredialIntegral(QgsProcessingAlgorithm):
                 featBase.setAttribute('numero_predial', ced30)
                 featBase.setAttribute('numero_predial_anterior', ced20)
                 featBase.setAttribute('clasifica_suelo_pot', clasificacionPOT)
+                featBase.setAttribute('area_terreno_geografica', area)
                 geom = feat.geometry()
 
-                row = {'id_predial': id, 'numero_predial': ced30, 'numero_predial_anterior': ced20, 'clasifica_suelo_pot': clasificacionPOT, 'geom': geom}
+                row = {'id_predial': id, 'numero_predial': ced30, 'numero_predial_anterior': ced20, 'clasifica_suelo_pot': clasificacionPOT, 'area_terreno_geografica': area, 'geom': geom}
                 gdf_baseCPOT = gdf_baseCPOT.append(row, ignore_index = True)
 
                 featBase.setGeometry(geom)
@@ -453,12 +441,15 @@ class AnalisisPredialIntegral(QgsProcessingAlgorithm):
         # Creando el campo 'id_predial' 
         feedback.pushInfo(" -   1.2 Creando y calculando el campo 'id_predial' en Base Catastral")
         baseC_rp.startEditing()
-        baseC_rp.dataProvider().addAttributes([QgsField("id_predial", QVariant.String)])
+        baseC_rp.dataProvider().addAttributes([QgsField("id_predial", QVariant.String), 
+                                                QgsField("area_terreno_geografica", QVariant.Double)])
         baseC_rp.updateFields()
         baseC_rp.commitChanges()
 
         # calculando id predial
         self.calculate_expression(baseC_rp, "id_predial", '$id')
+        # calculando area
+        self.calculate_expression(baseC_rp, "area_terreno_geografica", 'area($geometry)')
 
         #Intercepcion Base Catastral con Cartografía POT
         feedback.pushInfo(" -   1.3 Intercepcion Base Catastral con Cartografía POT")
@@ -535,9 +526,9 @@ class AnalisisPredialIntegral(QgsProcessingAlgorithm):
         """
         # Creando un dataframe donde se almacenaran la unión
         feedback.pushInfo(" - 3.1 Cruzando por Cedula Catastral (30 dig)")
-        gdf_CatUnificado = gdf_baseCPOT[["id_predial", "numero_predial", "clasifica_suelo_pot", "geom"]].merge(df_r1r2[["DEPARTAMENTO", "MUNICIPIO", "MATRICULA INMOBILIARIA", "NUMERO DE PREDIO", "numero_predial_anterior","numero_predial", "NOMBRE", "NUMERO DOCUMENTO", "DIRECCION", "AREA TERRENO", "AREA CONSTRUIDA"]], on = "numero_predial")
+        gdf_CatUnificado = gdf_baseCPOT[["id_predial", "numero_predial", "clasifica_suelo_pot", "area_terreno_geografica", "geom"]].merge(df_r1r2[["DEPARTAMENTO", "MUNICIPIO", "MATRICULA INMOBILIARIA", "NUMERO DE PREDIO", "numero_predial_anterior","numero_predial", "NOMBRE", "NUMERO DOCUMENTO", "DIRECCION", "AREA TERRENO", "AREA CONSTRUIDA"]], on = "numero_predial")
 
-        feedback.pushInfo(" - 3.2 Quitando ceros y duplicados en CedulaCatastral-FMI-Nombre")
+        feedback.pushInfo(" - 3.2 Quitando ceros y duplicados (CedulaCatastral-FMI-Nombre)")
         gdf_CatUnificado["numero_predial"] = gdf_CatUnificado.apply(lambda x: self.quitarCeros(x["numero_predial"]), axis=1)
         gdf_CatUnificado["MATRICULA INMOBILIARIA"] = gdf_CatUnificado.apply(lambda x: self.quitarCeros(x["MATRICULA INMOBILIARIA"]), axis=1)
         gdf_CatUnificado["MATRICULA INMOBILIARIA"] = gdf_CatUnificado.apply(lambda x: self.normalizarFMI(x["MATRICULA INMOBILIARIA"]), axis=1)
@@ -560,13 +551,14 @@ class AnalisisPredialIntegral(QgsProcessingAlgorithm):
         #Creando df de API vacion para empezar a llenar con los registros
         df_api = pd.DataFrame(columns=[
                     "fmi", "id_predial", "departamento", "municipio", "numero_predial",  
-                    "numero_predial_anterior", "circulo_registral", "numero_matricula", "antiguo_sistema_registro", "interrelacion_cat_reg", 
-                    "area_terreno_r1", "area_construida_r1", "clasificacion_suelo_pot",
-                    "ultimo_propietario_fmi", "direccion"
+                    "numero_predial_anterior", "circulo_registral", "numero_matricula", 
+                    "antiguo_sistema_registro", "interrelacion_cat_reg", 
+                    "area_terreno_r1", "area_construida_r1", "area_terreno_geografica",
+                    "clasificacion_suelo_pot", "ultimo_propietario_fmi", "direccion"
                 ])
         
         #Creando un df para la comparación de nombres y poder exportar a xls
-        df_comparacion = pd.DataFrame()
+        df_comparacion = pd.DataFrame(columns=["Nombre SNR", "Nombre Catastro", "Porcentaje"])
 
         for datoCatastro in cedCat_fmi_list:
             
@@ -587,11 +579,12 @@ class AnalisisPredialIntegral(QgsProcessingAlgorithm):
             area_terreno_igac = gdf_CatUnificadoFilter["AREA TERRENO"].tolist()[0]
             area_construida = gdf_CatUnificadoFilter["AREA CONSTRUIDA"].tolist()[0]
             fmiCat = gdf_CatUnificadoFilter["MATRICULA INMOBILIARIA"].tolist()[0]
+            area_geografica = gdf_CatUnificadoFilter["area_terreno_geografica"].tolist()[0]
             # Filtrando en SNR por FMI de catastro
             df_snr_filter = df_snr[df_snr["MATRICULA"] == fmiCat]
             df_snr_filter.sort_values(by='ID ANOTACION', ascending=False) #orden descendente
             list_DocsID_SNR = df_snr_filter["NRO DOCUMENTO"].tolist() #Lista Documentos de identidad SNR
-            list_noms_SNR = df_snr_filter["NRO DOCUMENTO"].tolist() #Lista Nombres SNR
+            list_noms_SNR = df_snr_filter["NOMBRES"].tolist() #Lista Nombres SNR
 
             cantidadNombresCat = len(list_noms_Catastro) #Cantidad de nombres en catastro Unificado
 
@@ -633,8 +626,9 @@ class AnalisisPredialIntegral(QgsProcessingAlgorithm):
                     "numero_matricula": folio, "antiguo_sistema_registro": antiguo, 
                     "interrelacion_cat_reg": interrelacionCatSNR, "propietario_catastro": propietarioCatastro, 
                     "coincidencia_propietario": coincidePropietario,"area_terreno_r1": area_terreno_igac, 
-                    "area_construida_r1":area_construida, "clasificacion_suelo_pot": clasifica_suelo_pot,
-                    "ultimo_propietario_fmi": ultimo_propietario_snr, "direccion": direccion
+                    "area_construida_r1":area_construida, 'area_terreno_geografica':area_geografica,
+                    "clasificacion_suelo_pot": clasifica_suelo_pot, "ultimo_propietario_fmi": ultimo_propietario_snr, 
+                    "direccion": direccion
                 }
             df_api = df_api.append(row, ignore_index = True)
         
@@ -648,13 +642,13 @@ class AnalisisPredialIntegral(QgsProcessingAlgorithm):
             en Catastro Unificado
         """
         fmi_api_list = df_api["fmi"].tolist() #Folios existentes en df api
-        df_snr_rural = df_snr[df_snr["TIPO PREDIO"] != "URBANO"]
+        
         for fmi_snr in snr_fmi_list:
             if fmi_snr in fmi_api_list:
                 pass
             else:
                 # Filtrando en SNR por FMI
-                df_snr_filter = df_snr_rural[df_snr_rural["MATRICULA"] == fmi_snr]
+                df_snr_filter = df_snr[df_snr["MATRICULA"] == fmi_snr]
                 df_snr_filter.sort_values(by='ID ANOTACION', ascending=False) #orden descendente
                 interrelacionCatSNR = "0" #Interrelacion Catastro registro: Solo en SNR
                 ultimo_propietario_snr = df_snr_filter["NOMBRES"].tolist()[0]
@@ -738,23 +732,32 @@ class AnalisisPredialIntegral(QgsProcessingAlgorithm):
         df_snr_filter["MATRICULA"] = df_snr_filter.apply(lambda x: self.quitarCeros(x["MATRICULA"]), axis=1)
         df_snr_filter["MATRICULA"] = df_snr_filter.apply(lambda x: self.normalizarFMI(x["MATRICULA"]), axis=1)
         df_snr_filter["FOLIO DERIVADO"] = df_snr_filter.apply(lambda x: self.quitarCeros(x["FOLIO DERIVADO"]), axis=1)
+        df_snr_filter["FOLIO DERIVADO"] = df_snr_filter.apply(lambda x: self.normalizarFMI(x["FOLIO DERIVADO"]), axis=1)
         df_snr_filter["NRO DOCUMENTO"] = df_snr_filter.apply(lambda x: self.quitarCeros(x["NRO DOCUMENTO"]), axis=1)
         snr_fmi_list = df_snr_filter["MATRICULA"].unique().tolist() #Lista de FMI en SNR
 
-        feedback.pushInfo(" - 4.3 Obteniendo los valores unicos CedulaCatastral-fmi de Catastro unificado")
+        feedback.pushInfo(" - 4.3 Obteniendo los valores unicos (CedulaCatastral-fmi) de Catastro unificado")
         gdf_CatUnificado["cedCat_fmi"] = gdf_CatUnificado["numero_predial"] + "_" + gdf_CatUnificado["MATRICULA INMOBILIARIA"]
         cedCat_fmi_list = gdf_CatUnificado["cedCat_fmi"].unique().tolist() #Lista de FMI en Catastro Unificado
 
         feedback.pushInfo(" - 4.4 Verificando interrelación catastro Registro")
-        feedback.pushInfo("    - - 4.4.1 Folios de Catastro presentes en SNR (según concat cedula_cat_fmi) - Coincidencia propietario")
+        feedback.pushInfo("    - - 4.4.1 Folios de Catastro presentes en SNR (cedula_cat_fmi) - Coincidencia propietario")
         df_api1, df_comparacion = self.fmiCat_enSNR(cedCat_fmi_list, gdf_CatUnificado, snr_fmi_list, df_snr_filter, feedback)
+
         feedback.pushInfo("    - - 4.4.2 Adicionando folios de SNR que no se relacionan con Catastro (tipo rural y sin info)")
-        df_api2 = self.Adicion_fmiSNR(df_api1, snr_fmi_list, df_snr_filter)
+        #Filtrando por tipo de predio RURAL Y SIN INFORMACIÓN
+        df_snr_rural = df_snr_filter[df_snr_filter["TIPO PREDIO"] != "URBANO"]
+        snr_fmi_list_rural = df_snr_rural["MATRICULA"].unique().tolist() #Lista de FMI en SNR
+        df_api2 = self.Adicion_fmiSNR(df_api1, snr_fmi_list_rural, df_snr_rural)
+
         #Definiendo el nombre de departamento y municipio para todos los datos
         df_api2["departamento"] = df_api1["departamento"].tolist()[0]
         df_api2["municipio"] = df_api1["municipio"].tolist()[0]
         
-        feedback.pushInfo(" - 4.5 Comparación de nombres")
+        feedback.pushInfo(" - 4.5 Folios Matrices y Segregados")
+        df_api2[['fmi_matriz', 'fmi_segregado']] = df_api2.apply(lambda x: self.encontrar_matriz_segregado(x["fmi"], df_snr_filter), axis=1)
+        del df_api2["fmi"] #Eliminando fmi
+
 
 
         # exportando resultado a excel
