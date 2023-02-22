@@ -388,25 +388,23 @@ class AnalisisPredialIntegral(QgsProcessingAlgorithm):
             else:
                 clasificacionPOT = "4"
 
-            if(clasificacionPOT != "1"):
-                # Guardando información en la base catastral definitiva
-                featBase = QgsFeature() # features
-                featBase.setFields(base.fields()) # features con campos de la base definitiva
+            # Guardando información en la base catastral definitiva
+            featBase = QgsFeature() # features
+            featBase.setFields(base.fields()) # features con campos de la base definitiva
 
-                featBase.setAttribute('id_predial', id)
-                featBase.setAttribute('numero_predial', ced30)
-                featBase.setAttribute('numero_predial_anterior', ced20)
-                featBase.setAttribute('clasifica_suelo_pot', clasificacionPOT)
-                featBase.setAttribute('area_terreno_geografica', area)
-                geom = feat.geometry()
+            featBase.setAttribute('id_predial', id)
+            featBase.setAttribute('numero_predial', ced30)
+            featBase.setAttribute('numero_predial_anterior', ced20)
+            featBase.setAttribute('clasifica_suelo_pot', clasificacionPOT)
+            featBase.setAttribute('area_terreno_geografica', area)
+            geom = feat.geometry()
 
-                row = {'id_predial': id, 'numero_predial': ced30, 'numero_predial_anterior': ced20, 'clasifica_suelo_pot': clasificacionPOT, 'area_terreno_geografica': area, 'geom': geom}
-                gdf_baseCPOT = gdf_baseCPOT.append(row, ignore_index = True)
+            row = {'id_predial': id, 'numero_predial': ced30, 'numero_predial_anterior': ced20, 'clasifica_suelo_pot': clasificacionPOT, 'area_terreno_geografica': area, 'geom': geom}
+            gdf_baseCPOT = gdf_baseCPOT.append(row, ignore_index = True)
 
-                featBase.setGeometry(geom)
-                base.dataProvider().addFeature(featBase)
-            else:
-                pass
+            featBase.setGeometry(geom)
+            base.dataProvider().addFeature(featBase)
+            
 
         base.commitChanges() 
 
@@ -510,7 +508,7 @@ class AnalisisPredialIntegral(QgsProcessingAlgorithm):
         
         # Creando un dataframe donde se almacenaran la unión
         feedback.pushInfo(" - 2.3 Unificando por Cedula Catastral (30 dig)")
-        df_r1r2 = df_r2[["numero_predial", "MATRICULA INMOBILIARIA"]].merge(df_r1[["DEPARTAMENTO", "MUNICIPIO", "NUMERO DE PREDIO", "numero_predial_anterior","numero_predial", "NOMBRE", "NUMERO DOCUMENTO", "DIRECCION", "AREA TERRENO", "AREA CONSTRUIDA"]], on = "numero_predial")
+        df_r1r2 = df_r2[["numero_predial", "MATRICULA INMOBILIARIA"]].merge(df_r1[["DEPARTAMENTO", "MUNICIPIO", "NUMERO DE PREDIO", "numero_predial_anterior","numero_predial", "NOMBRE", "NUMERO DOCUMENTO", "DIRECCION", "AREA TERRENO", "AREA CONSTRUIDA"]], on = "numero_predial", how = "outer")
         
         # exportando resultado a excel
         feedback.pushInfo(" - 2.4 exportando resultado a excel")
@@ -526,7 +524,7 @@ class AnalisisPredialIntegral(QgsProcessingAlgorithm):
         """
         # Creando un dataframe donde se almacenaran la unión
         feedback.pushInfo(" - 3.1 Cruzando por Cedula Catastral (30 dig)")
-        gdf_CatUnificado = gdf_baseCPOT[["id_predial", "numero_predial", "clasifica_suelo_pot", "area_terreno_geografica", "geom"]].merge(df_r1r2[["DEPARTAMENTO", "MUNICIPIO", "MATRICULA INMOBILIARIA", "NUMERO DE PREDIO", "numero_predial_anterior","numero_predial", "NOMBRE", "NUMERO DOCUMENTO", "DIRECCION", "AREA TERRENO", "AREA CONSTRUIDA"]], on = "numero_predial")
+        gdf_CatUnificado = gdf_baseCPOT[["id_predial", "numero_predial", "clasifica_suelo_pot", "area_terreno_geografica", "geom"]].merge(df_r1r2[["DEPARTAMENTO", "MUNICIPIO", "MATRICULA INMOBILIARIA", "NUMERO DE PREDIO", "numero_predial_anterior","numero_predial", "NOMBRE", "NUMERO DOCUMENTO", "DIRECCION", "AREA TERRENO", "AREA CONSTRUIDA"]], on = "numero_predial", how = "outer")
 
         feedback.pushInfo(" - 3.2 Quitando ceros y duplicados (CedulaCatastral-FMI-Nombre)")
         gdf_CatUnificado["numero_predial"] = gdf_CatUnificado.apply(lambda x: self.quitarCeros(x["numero_predial"]), axis=1)
