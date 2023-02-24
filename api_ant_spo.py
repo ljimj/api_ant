@@ -220,7 +220,7 @@ class AnalisisPredialIntegral(QgsProcessingAlgorithm):
         if(fmi != ""):
 
             #SEGREGADOS
-            fmiListM = df_snr['MATRICULA'].tolist() #Lista de todos los FMI existentes en SNR
+            fmiListM = df_snr['MATRICULA'].unique().tolist() #Lista de todos los FMI existentes en SNR
             if(fmi in fmiListM): #si el fmi se encuentra en la lista continue
 
                 #Operaciones para determinar los fmi derivados
@@ -234,7 +234,7 @@ class AnalisisPredialIntegral(QgsProcessingAlgorithm):
                 segregados = ""
             
             #MATRICES
-            fmiListD = df_snr['FOLIO DERIVADO'].tolist()
+            fmiListD = df_snr['FOLIO DERIVADO'].unique().tolist()
             if(fmi in fmiListD):
                 #Operaciones para determinar los fmi matrices
                 df_snr_filterM = df_snr[df_snr['FOLIO DERIVADO'] == fmi] #Filtro para encontrar matrices del fmi
@@ -286,7 +286,9 @@ class AnalisisPredialIntegral(QgsProcessingAlgorithm):
         """
         fmi = str(fmi)
         guiones = fmi.count("-")
-
+        if fmi == "nan":
+            fmi = ""
+        
         if guiones == 0:
             #Para folio de sistema antiguo 
             fmi = fmi #544332222
@@ -314,11 +316,16 @@ class AnalisisPredialIntegral(QgsProcessingAlgorithm):
             en qué porcentaje son iguales.
             Si son iguales en un >83% Retorna "IGUAL"
         """
-        porcentaje = fuzz.ratio(nombre1,nombre2) 
-        # Función para comparar palabras retornando un porcentaje 0%-100% de similitud
-        if porcentaje > 83:
-            comparacion = "IGUAL"
+        if (nombre1 != "" or nombre2 != "" or nombre1 != "nan" or nombre2 != "nan"):
+
+            porcentaje = fuzz.ratio(nombre1,nombre2) 
+            # Función para comparar palabras retornando un porcentaje 0%-100% de similitud
+            if porcentaje > 83:
+                comparacion = "IGUAL"
+            else:
+                comparacion = "DESIGUAL"
         else:
+            porcentaje = 0
             comparacion = "DESIGUAL"
 
         return comparacion, porcentaje
@@ -373,16 +380,16 @@ class AnalisisPredialIntegral(QgsProcessingAlgorithm):
 
             if (cantidadSuelos == 1):
                 claseSueloPOT = self.normalizar(claseSueloPOT[0]) #quitanto tildes, espacios caracteres especiales y pasando a minusculas
-                if(claseSueloPOT == "rural"):
+                if(claseSueloPOT == "rural" and clasificaCedCat != "01" ):
                     clasificacionPOT = "0"
-                elif (claseSueloPOT == "zona expansion"):
-                    clasificacionPOT = "2"
-                elif (claseSueloPOT == "expansion urbana"):
-                    clasificacionPOT = "3"
-                elif (claseSueloPOT == "urbano" and clasificaCedCat != "01"):
-                    clasificacionPOT = "4"
-                else:
+                elif(claseSueloPOT == "urbano" and clasificaCedCat == "01" ):
                     clasificacionPOT = "1"
+                elif ("expansion" in claseSueloPOT and clasificaCedCat != "01"):
+                    clasificacionPOT = "2"
+                elif ((claseSueloPOT == "urbano" and clasificaCedCat != "01") 
+                    or (claseSueloPOT == "rural" and clasificaCedCat == "01")
+                    or ("expansion" in claseSueloPOT and clasificaCedCat == "01")):
+                    clasificacionPOT = "4"
             elif (cantidadSuelos > 1):
                 clasificacionPOT = "4"
             else:
@@ -532,11 +539,15 @@ class AnalisisPredialIntegral(QgsProcessingAlgorithm):
         gdf_CatUnificado["MATRICULA INMOBILIARIA"] = gdf_CatUnificado.apply(lambda x: self.normalizarFMI(x["MATRICULA INMOBILIARIA"]), axis=1)
         gdf_CatUnificado["NUMERO DOCUMENTO"] = gdf_CatUnificado.apply(lambda x: self.quitarCeros(x["NUMERO DOCUMENTO"]), axis=1)
         gdf_CatUnificado["NOMBRE"] = gdf_CatUnificado["NOMBRE"].str.strip()
-        gdf_CatUnificado["CedCat-FMI-Nom"] = gdf_CatUnificado["numero_predial"] + "_" + gdf_CatUnificado["MATRICULA INMOBILIARIA"]+ "_" + gdf_CatUnificado["NOMBRE"]
+        gdf_CatUnificado["CedCat-FMI-Nom"] = gdf_CatUnificado.apply(lambda x: str(x["numero_predial"]) + "-" + str(x["MATRICULA INMOBILIARIA"]) + "-" + str(x["NOMBRE"]), axis =1)
+        # exportando resultado a excel
+        feedback.pushInfo(" - 3.3 exportando resultado a excel")
+        xlsPath = output + "/antes_CatastroUnificado_Registros_CartoBase_POT.xlsx"
+        gdf_CatUnificado.to_excel(xlsPath)
         gdf_CatUnificado = gdf_CatUnificado.drop_duplicates(subset=['CedCat-FMI-Nom'])
 
         # exportando resultado a excel
-        feedback.pushInfo(" - 3.3 exportando resultado a excel")
+        feedback.pushInfo(" - 3.4 exportando resultado a excel depues de eliminar duplicados")
         xlsPath = output + "/CatastroUnificado_Registros_CartoBase_POT.xlsx"
         gdf_CatUnificado.to_excel(xlsPath)
 
@@ -565,6 +576,9 @@ class AnalisisPredialIntegral(QgsProcessingAlgorithm):
             # Extrayendo información de catastro unificado
             list_DocsID_Cat = gdf_CatUnificadoFilter["NUMERO DOCUMENTO"].tolist() # Lista Documentos de identidad Catastro Unificado
             list_noms_Catastro = gdf_CatUnificadoFilter["NOMBRE"].tolist() #Lista Nombres Catastro Unificado
+            
+            list_noms_Catastro = [nombre.replace("nan", "") for nombre in list_noms_Catastro] #Quitando valores con nan
+
             #feedback.pushInfo(" - - - tamaño filtro cat {}".format(len(gdf_CatUnificadoFilter)))
             #feedback.pushInfo(" - - - cols {}".format(gdf_CatUnificadoFilter.columns))
             departamento = gdf_CatUnificadoFilter["DEPARTAMENTO"].tolist()[0]
@@ -578,60 +592,66 @@ class AnalisisPredialIntegral(QgsProcessingAlgorithm):
             area_construida = gdf_CatUnificadoFilter["AREA CONSTRUIDA"].tolist()[0]
             fmiCat = gdf_CatUnificadoFilter["MATRICULA INMOBILIARIA"].tolist()[0]
             area_geografica = gdf_CatUnificadoFilter["area_terreno_geografica"].tolist()[0]
-            # Filtrando en SNR por FMI de catastro
-            df_snr_filter = df_snr[df_snr["MATRICULA"] == fmiCat]
-            df_snr_filter.sort_values(by='ID ANOTACION', ascending=False) #orden descendente
-            list_DocsID_SNR = df_snr_filter["NRO DOCUMENTO"].tolist() #Lista Documentos de identidad SNR
-            list_noms_SNR = df_snr_filter["NOMBRES"].tolist() #Lista Nombres SNR
 
-            cantidadNombresCat = len(list_noms_Catastro) #Cantidad de nombres en catastro Unificado
+            if not 'nan' in ced_cat:
+                
+                # Filtrando en SNR por FMI de catastro y por propietario
+                df_snr_filter = df_snr[df_snr["MATRICULA"] == fmiCat]
+                df_snr_filter = df_snr_filter[df_snr_filter['PROPIETARIO'] != ""]
+                # orden descendente en ID ANOTACION
+                df_snr_filter.sort_values(by='ID ANOTACION', ascending=False) 
+                list_DocsID_SNR = df_snr_filter["NRO DOCUMENTO"].tolist() #Lista Documentos de identidad SNR
+                list_noms_SNR = df_snr_filter["NOMBRES"].tolist() #Lista Nombres SNR
 
-            if(fmiCat == ""):
+                cantidadNombresCat = len(list_noms_Catastro) #Cantidad de nombres en catastro Unificado
 
-                interrelacionCatSNR = "1" #Interrelacion Catastro registro: Sin folio
-                ultimo_propietario_snr = ""
-                # Coincidencia Catastro Registro
-                coincidePropietario = "3" #Sin interrelación
-                propietarioCatastro = list_noms_Catastro[0] #Se toma cualquier nombre de la lista de catastro Unificado
-            elif (fmiCat in snr_fmi_list):
+                if(fmiCat == ""):
 
-                interrelacionCatSNR = "2" #Interrelacion Catastro registro: interrelacion
-                ultimo_propietario_snr = df_snr_filter["NOMBRES"].tolist()[0]
-                propietarioCatastro, coincidePropietario, df_comparacion = self.compararPropietarioCatSnr(list_DocsID_Cat, list_DocsID_SNR, list_noms_Catastro, list_noms_SNR, df_comparacion)
+                    interrelacionCatSNR = "1" #Interrelacion Catastro registro: Sin folio
+                    ultimo_propietario_snr = ""
+                    # Coincidencia Catastro Registro
+                    coincidePropietario = "3" #Sin interrelación
+                    propietarioCatastro = list_noms_Catastro[0] #Se toma cualquier nombre de la lista de catastro Unificado
 
+                elif (fmiCat in snr_fmi_list):
+
+                    interrelacionCatSNR = "2" #Interrelacion Catastro registro: interrelacion
+                    ultimo_propietario_snr = df_snr_filter["NOMBRES"].tolist()[0]
+                    propietarioCatastro, coincidePropietario, df_comparacion = self.compararPropietarioCatSnr(list_DocsID_Cat, list_DocsID_SNR, list_noms_Catastro, list_noms_SNR, df_comparacion)
+
+                else:
+
+                    interrelacionCatSNR = "3" #Interrelacion Catastro registro: Solo en Catastro
+                    ultimo_propietario_snr = ""
+                    # Coincidencia Catastro Registro
+                    coincidePropietario = "3" #Sin interrelación
+                    propietarioCatastro = list_noms_Catastro[0] #Se toma cualquier nombre de la lista de catastro Unificado
+                
+                # Cuando hay más un propietario registrado en Catastro
+                if cantidadNombresCat > 1:
+                    otro = " Y OTRO"
+                else:
+                    otro = ""
+                propietarioCatastro = "{}{}".format(propietarioCatastro, otro)
+
+                #Aplicando función para categorizar el folio en sistema actual y antiguo
+                circulo, folio, antiguo = self.separarFolio(fmiCat)
+
+                row = {
+                        "fmi":fmiCat, "id_predial": id_predial, "departamento": departamento,  
+                        "municipio": municipio, "numero_predial": ced_cat,  
+                        "numero_predial_anterior": ced_cat_ant, "circulo_registral": circulo, 
+                        "numero_matricula": folio, "antiguo_sistema_registro": antiguo, 
+                        "interrelacion_cat_reg": interrelacionCatSNR, "propietario_catastro": propietarioCatastro, 
+                        "coincidencia_propietario": coincidePropietario,"area_terreno_r1": area_terreno_igac, 
+                        "area_construida_r1":area_construida, 'area_terreno_geografica':area_geografica,
+                        "clasificacion_suelo_pot": clasifica_suelo_pot, "ultimo_propietario_fmi": ultimo_propietario_snr, 
+                        "direccion": direccion
+                    }
+                df_api = df_api.append(row, ignore_index = True)
             else:
-
-                interrelacionCatSNR = "3" #Interrelacion Catastro registro: Solo en Catastro
-                ultimo_propietario_snr = ""
-                # Coincidencia Catastro Registro
-                coincidePropietario = "3" #Sin interrelación
-                propietarioCatastro = list_noms_Catastro[0] #Se toma cualquier nombre de la lista de catastro Unificado
-            
-            # Cuando hay más un propietario registrado en Catastro
-            if cantidadNombresCat > 1:
-                otro = " Y OTRO"
-            else:
-                otro = ""
-            propietarioCatastro = propietarioCatastro + otro
-
-            #Aplicando función para categorizar el folio en sistema actual y antiguo
-            circulo, folio, antiguo = self.separarFolio(fmiCat)
-
-            row = {
-                    "fmi":fmiCat, "id_predial": id_predial, "departamento": departamento,  
-                    "municipio": municipio, "numero_predial": ced_cat,  
-                    "numero_predial_anterior": ced_cat_ant, "circulo_registral": circulo, 
-                    "numero_matricula": folio, "antiguo_sistema_registro": antiguo, 
-                    "interrelacion_cat_reg": interrelacionCatSNR, "propietario_catastro": propietarioCatastro, 
-                    "coincidencia_propietario": coincidePropietario,"area_terreno_r1": area_terreno_igac, 
-                    "area_construida_r1":area_construida, 'area_terreno_geografica':area_geografica,
-                    "clasificacion_suelo_pot": clasifica_suelo_pot, "ultimo_propietario_fmi": ultimo_propietario_snr, 
-                    "direccion": direccion
-                }
-            df_api = df_api.append(row, ignore_index = True)
+                pass
         
-        
-
         return df_api, df_comparacion
     
     def Adicion_fmiSNR(self, df_api, snr_fmi_list, df_snr):
@@ -720,31 +740,27 @@ class AnalisisPredialIntegral(QgsProcessingAlgorithm):
         df_snr = pd.read_excel(pathSNR) #df de SNR
         
         #Quitando espacios y ceros a la izquierda
-        feedback.pushInfo(" - 4.2 Filtrando por propietario y Normalizando campos")
-        
-        #Filtrando por propietario y pasando el campo de ID anotación para ordenarlo 
-        df_snr_filter = df_snr[df_snr['PROPIETARIO'] == "X"]
-        df_snr_filter['ID ANOTACION'] = pd.to_numeric(df_snr_filter['ID ANOTACION'])
+        feedback.pushInfo(" - 4.2 Normalizando campos")   
         
         #Normalizando 
-        df_snr_filter["MATRICULA"] = df_snr_filter.apply(lambda x: self.quitarCeros(x["MATRICULA"]), axis=1)
-        df_snr_filter["MATRICULA"] = df_snr_filter.apply(lambda x: self.normalizarFMI(x["MATRICULA"]), axis=1)
-        df_snr_filter["FOLIO DERIVADO"] = df_snr_filter.apply(lambda x: self.quitarCeros(x["FOLIO DERIVADO"]), axis=1)
-        df_snr_filter["FOLIO DERIVADO"] = df_snr_filter.apply(lambda x: self.normalizarFMI(x["FOLIO DERIVADO"]), axis=1)
-        df_snr_filter["NRO DOCUMENTO"] = df_snr_filter.apply(lambda x: self.quitarCeros(x["NRO DOCUMENTO"]), axis=1)
-        snr_fmi_list = df_snr_filter["MATRICULA"].unique().tolist() #Lista de FMI en SNR
+        df_snr["MATRICULA"] = df_snr.apply(lambda x: self.quitarCeros(x["MATRICULA"]), axis=1)
+        df_snr["MATRICULA"] = df_snr.apply(lambda x: self.normalizarFMI(x["MATRICULA"]), axis=1)
+        df_snr["FOLIO DERIVADO"] = df_snr.apply(lambda x: self.quitarCeros(x["FOLIO DERIVADO"]), axis=1)
+        df_snr["FOLIO DERIVADO"] = df_snr.apply(lambda x: self.normalizarFMI(x["FOLIO DERIVADO"]), axis=1)
+        df_snr["NRO DOCUMENTO"] = df_snr.apply(lambda x: self.quitarCeros(x["NRO DOCUMENTO"]), axis=1)
+        snr_fmi_list = df_snr["MATRICULA"].unique().tolist() #Lista de FMI en SNR
 
         feedback.pushInfo(" - 4.3 Obteniendo los valores unicos (CedulaCatastral-fmi) de Catastro unificado")
-        gdf_CatUnificado["cedCat_fmi"] = gdf_CatUnificado["numero_predial"] + "_" + gdf_CatUnificado["MATRICULA INMOBILIARIA"]
+        gdf_CatUnificado["cedCat_fmi"] = gdf_CatUnificado.apply(lambda x: str(x["numero_predial"]) + "-" + str(x["MATRICULA INMOBILIARIA"]), axis =1)
         cedCat_fmi_list = gdf_CatUnificado["cedCat_fmi"].unique().tolist() #Lista de FMI en Catastro Unificado
 
         feedback.pushInfo(" - 4.4 Verificando interrelación catastro Registro")
         feedback.pushInfo("    - - 4.4.1 Folios de Catastro presentes en SNR (cedula_cat_fmi) - Coincidencia propietario")
-        df_api1, df_comparacion = self.fmiCat_enSNR(cedCat_fmi_list, gdf_CatUnificado, snr_fmi_list, df_snr_filter, feedback)
+        df_api1, df_comparacion = self.fmiCat_enSNR(cedCat_fmi_list, gdf_CatUnificado, snr_fmi_list, df_snr, feedback)
 
         feedback.pushInfo("    - - 4.4.2 Adicionando folios de SNR que no se relacionan con Catastro (tipo rural y sin info)")
         #Filtrando por tipo de predio RURAL Y SIN INFORMACIÓN
-        df_snr_rural = df_snr_filter[df_snr_filter["TIPO PREDIO"] != "URBANO"]
+        df_snr_rural = df_snr[df_snr["TIPO PREDIO"] != "URBANO"]
         snr_fmi_list_rural = df_snr_rural["MATRICULA"].unique().tolist() #Lista de FMI en SNR
         df_api2 = self.Adicion_fmiSNR(df_api1, snr_fmi_list_rural, df_snr_rural)
 
@@ -753,10 +769,8 @@ class AnalisisPredialIntegral(QgsProcessingAlgorithm):
         df_api2["municipio"] = df_api1["municipio"].tolist()[0]
         
         feedback.pushInfo(" - 4.5 Folios Matrices y Segregados")
-        df_api2[['fmi_matriz', 'fmi_segregado']] = df_api2.apply(lambda x: self.encontrar_matriz_segregado(x["fmi"], df_snr_filter), axis=1)
+        df_api2[['fmi_matriz', 'fmi_segregado']] = df_api2.apply(lambda x: self.encontrar_matriz_segregado(x["fmi"], df_snr), axis=1)
         del df_api2["fmi"] #Eliminando fmi
-
-
 
         # exportando resultado a excel
         feedback.pushInfo(" - - 4.6 exportando resultado a excel")
@@ -767,9 +781,6 @@ class AnalisisPredialIntegral(QgsProcessingAlgorithm):
         xlsPath = output + "/Comparacion_Nombres.xlsx"
         df_comparacion.to_excel(xlsPath)
         
-            
-
-
     def processAlgorithm(self, parameters, context, feedback):
         """
         Here is where the processing itself takes place.
