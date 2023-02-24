@@ -180,6 +180,37 @@ class AnalisisPredialIntegral(QgsProcessingAlgorithm):
             layer.updateFeature(f)  
         layer.commitChanges()
     
+    def y_otro(self, list_nombres):
+        """
+            Función para adicionar la palabra otro a un nombre.
+            Esto cuando hayan más de un nombre en a lista
+        """
+        numero_nombres = len(list_nombres)
+        if numero_nombres > 1:
+            otro = " Y OTRO"
+        else:
+            otro = ""
+        
+        return otro
+
+    def fmi_activo(self, estado):
+        """
+            Función para retornar el dominio del campo fmi_activo
+            según el estado del folio
+        """
+
+        estado = estado.strip() #Eliminando espacios en blanco
+        estado = estado.lower() # pasando a minusculas
+
+        if(estado == "activo"):
+            dominio = "0"
+        elif(estado == "cerrado"):
+            dominio = "2"
+        else:
+            dominio = "1"
+
+        return dominio        
+ 
     def normalizar(self, nombre):
         """
             Función para normalizar nombres buscando y reemplazando
@@ -501,7 +532,7 @@ class AnalisisPredialIntegral(QgsProcessingAlgorithm):
         """
 
         pathR1 = insumos + "/Registro 1.xlsx"
-        pathR2 = insumos + "/registro 2.xlsx"
+        pathR2 = insumos + "/Registro 2.xlsx"
 
         feedback.pushInfo(" - 2.1 Leyendo R1")
         df_r1 = pd.read_excel(pathR1)
@@ -577,7 +608,7 @@ class AnalisisPredialIntegral(QgsProcessingAlgorithm):
             list_DocsID_Cat = gdf_CatUnificadoFilter["NUMERO DOCUMENTO"].tolist() # Lista Documentos de identidad Catastro Unificado
             list_noms_Catastro = gdf_CatUnificadoFilter["NOMBRE"].tolist() #Lista Nombres Catastro Unificado
             
-            list_noms_Catastro = [nombre.replace("nan", "") for nombre in list_noms_Catastro] #Quitando valores con nan
+            list_noms_Catastro = [str(nombre).replace("nan", "") for nombre in list_noms_Catastro] #Quitando valores con nan
 
             #feedback.pushInfo(" - - - tamaño filtro cat {}".format(len(gdf_CatUnificadoFilter)))
             #feedback.pushInfo(" - - - cols {}".format(gdf_CatUnificadoFilter.columns))
@@ -596,19 +627,21 @@ class AnalisisPredialIntegral(QgsProcessingAlgorithm):
             if not 'nan' in ced_cat:
                 
                 # Filtrando en SNR por FMI de catastro y por propietario
-                df_snr_filter = df_snr[df_snr["MATRICULA"] == fmiCat]
-                df_snr_filter = df_snr_filter[df_snr_filter['PROPIETARIO'] != ""]
+                df_snr_filterFMI = df_snr[df_snr["MATRICULA"] == fmiCat]
+                df_snr_filter = df_snr_filterFMI[df_snr_filterFMI['PROPIETARIO'] == "X"]
                 # orden descendente en ID ANOTACION
-                df_snr_filter.sort_values(by='ID ANOTACION', ascending=False) 
+                df_snr_filter["ID ANOTACION"] = df_snr_filter["ID ANOTACION"].astype(int)
+                df_snr_filter = df_snr_filter.sort_values(by='ID ANOTACION', ascending=False) 
+                list_IDanotacion = df_snr_filter["ID ANOTACION"].tolist() #Lista de ID anotacion 
                 list_DocsID_SNR = df_snr_filter["NRO DOCUMENTO"].tolist() #Lista Documentos de identidad SNR
                 list_noms_SNR = df_snr_filter["NOMBRES"].tolist() #Lista Nombres SNR
 
-                cantidadNombresCat = len(list_noms_Catastro) #Cantidad de nombres en catastro Unificado
-
-                if(fmiCat == ""):
+                if(fmiCat == "" or fmiCat == "nan"):
 
                     interrelacionCatSNR = "1" #Interrelacion Catastro registro: Sin folio
                     ultimo_propietario_snr = ""
+                    cedCat_fmi = ""
+                    fmiActivo = ""
                     # Coincidencia Catastro Registro
                     coincidePropietario = "3" #Sin interrelación
                     propietarioCatastro = list_noms_Catastro[0] #Se toma cualquier nombre de la lista de catastro Unificado
@@ -616,22 +649,31 @@ class AnalisisPredialIntegral(QgsProcessingAlgorithm):
                 elif (fmiCat in snr_fmi_list):
 
                     interrelacionCatSNR = "2" #Interrelacion Catastro registro: interrelacion
-                    ultimo_propietario_snr = df_snr_filter["NOMBRES"].tolist()[0]
-                    propietarioCatastro, coincidePropietario, df_comparacion = self.compararPropietarioCatSnr(list_DocsID_Cat, list_DocsID_SNR, list_noms_Catastro, list_noms_SNR, df_comparacion)
+                    cedCat_fmi = df_snr_filterFMI['NRO CATASTRO'].tolist()[0]
+                    fmiEstado = df_snr_filterFMI['ESTADO ORIGEN'].tolist()[0]
+                    fmiActivo = self.fmi_activo(fmiEstado)
+                    if (len(list_IDanotacion)>0):
+                        ultima_IDanotacion = list_IDanotacion[0]
+                        df_snr_ultimoProp = df_snr_filter[df_snr_filter["ID ANOTACION"] == ultima_IDanotacion]
+                        nombres_ultimoProp = df_snr_ultimoProp["NOMBRES"].tolist()
+                        otro = self.y_otro(nombres_ultimoProp)
+                        ultimo_propietario_snr = "{}{}".format(nombres_ultimoProp[0], otro)
+                    else:
+                        ultimo_propietario_snr = ""
+                    propietarioCatastro, coincidePropietario, df_comparacion = self.compararPropietarioCatSnr(list_DocsID_Cat, list_DocsID_SNR, list_noms_Catastro, list_noms_SNR, list_IDanotacion, df_comparacion)
 
                 else:
 
                     interrelacionCatSNR = "3" #Interrelacion Catastro registro: Solo en Catastro
                     ultimo_propietario_snr = ""
+                    cedCat_fmi = ""
+                    fmiActivo = ""
                     # Coincidencia Catastro Registro
                     coincidePropietario = "3" #Sin interrelación
                     propietarioCatastro = list_noms_Catastro[0] #Se toma cualquier nombre de la lista de catastro Unificado
                 
                 # Cuando hay más un propietario registrado en Catastro
-                if cantidadNombresCat > 1:
-                    otro = " Y OTRO"
-                else:
-                    otro = ""
+                otro = self.y_otro(list_noms_Catastro)
                 propietarioCatastro = "{}{}".format(propietarioCatastro, otro)
 
                 #Aplicando función para categorizar el folio en sistema actual y antiguo
@@ -646,7 +688,7 @@ class AnalisisPredialIntegral(QgsProcessingAlgorithm):
                         "coincidencia_propietario": coincidePropietario,"area_terreno_r1": area_terreno_igac, 
                         "area_construida_r1":area_construida, 'area_terreno_geografica':area_geografica,
                         "clasificacion_suelo_pot": clasifica_suelo_pot, "ultimo_propietario_fmi": ultimo_propietario_snr, 
-                        "direccion": direccion
+                        "direccion": direccion, "fmi_activo": fmiActivo, "cedula_catastral_fmi": cedCat_fmi
                     }
                 df_api = df_api.append(row, ignore_index = True)
             else:
@@ -666,10 +708,23 @@ class AnalisisPredialIntegral(QgsProcessingAlgorithm):
                 pass
             else:
                 # Filtrando en SNR por FMI
-                df_snr_filter = df_snr[df_snr["MATRICULA"] == fmi_snr]
-                df_snr_filter.sort_values(by='ID ANOTACION', ascending=False) #orden descendente
+                df_snr_filterFMI = df_snr[df_snr["MATRICULA"] == fmi_snr]
+                df_snr_filter = df_snr_filterFMI[df_snr_filterFMI['PROPIETARIO'] == "X"]
+                df_snr_filter["ID ANOTACION"] = df_snr_filter["ID ANOTACION"].astype(int)
+                df_snr_filter = df_snr_filter.sort_values(by='ID ANOTACION', ascending=False)
+                list_IDanotacion = df_snr_filter["ID ANOTACION"].tolist() #Lista de ID anotacion 
                 interrelacionCatSNR = "0" #Interrelacion Catastro registro: Solo en SNR
-                ultimo_propietario_snr = df_snr_filter["NOMBRES"].tolist()[0]
+                if (len(list_IDanotacion)>0):
+                    ultima_IDanotacion = list_IDanotacion[0]
+                    df_snr_ultimoProp = df_snr_filter[df_snr_filter["ID ANOTACION"] == ultima_IDanotacion]
+                    nombres_ultimoProp = df_snr_ultimoProp["NOMBRES"].tolist()
+                    otro = self.y_otro(nombres_ultimoProp)
+                    ultimo_propietario_snr = "{}{}".format(nombres_ultimoProp[0], otro)
+                else:
+                    ultimo_propietario_snr = ""
+                cedCat_fmi = df_snr_filterFMI['NRO CATASTRO'].tolist()[0]
+                fmiEstado = df_snr_filterFMI['ESTADO ORIGEN'].tolist()[0]
+                fmiActivo = self.fmi_activo(fmiEstado)
                 # Coincidencia Catastro Registro
                 coincidePropietario = "3" #Sin interrelación
 
@@ -679,50 +734,62 @@ class AnalisisPredialIntegral(QgsProcessingAlgorithm):
                 row = {
                     "fmi":fmi_snr, "circulo_registral": circulo, "numero_matricula": folio, 
                     "antiguo_sistema_registro": antiguo, "interrelacion_cat_reg": interrelacionCatSNR, 
-                    "ultimo_propietario_fmi": ultimo_propietario_snr, "coincidencia_propietario": coincidePropietario
+                    "ultimo_propietario_fmi": ultimo_propietario_snr, "coincidencia_propietario": coincidePropietario, 
+                    "fmi_activo": fmiActivo, "cedula_catastral_fmi": cedCat_fmi
                 }
                 df_api = df_api.append(row, ignore_index = True)
         
         return df_api
     
-    def compararPropietarioCatSnr(self, list_DocsID_Cat, list_DocsID_SNR, list_noms_Catastro, list_noms_SNR, df_comparacion):
+    def compararPropietarioCatSnr(self, list_DocsID_Cat, list_DocsID_SNR, list_noms_Catastro, list_noms_SNR, list_IDanotacion, df_comparacion):
         """
             Función para comparar la coincidencia del propietario en 
             catastro y en registro 
         """
-        # Comparación por documentos de identidad
-        i = 0 # Contador para saber si coincide con propietario actual o anterior 
-        for docIDsnr in list_DocsID_SNR:
-            if (docIDsnr in list_DocsID_Cat):
-                indice = list_DocsID_Cat.index(docIDsnr) # indice en lista de documentos para obtener el nombre de Catastro
-                nombre_cat = list_noms_Catastro[indice]
-                comparacion = "IGUAL"
-                break
-            else:
-                comparacion = "DIFERENTE"
-            i += 1
-        
-        if(comparacion != "IGUAL"):
-            # Comparación por nombres
+        if (len(list_DocsID_SNR) > 0):
+            # Comparación por documentos de identidad
             i = 0 # Contador para saber si coincide con propietario actual o anterior 
-            for nombre_snr in list_noms_SNR: #Se recorre la lista nombres SNR ordenado por el id anotación (descente)
-                nombre_snr_normal = self.normalizar(nombre_snr)
-                for nombre_cat in list_noms_Catastro:
-                    nombre_cat_normal = self.normalizar(nombre_cat)
-                    comparacion, porcentaje = self.comparaNombres(nombre_snr_normal, nombre_cat_normal)
-                    df_comparacion = df_comparacion.append({"Nombre SNR":nombre_snr_normal, "Nombre Catastro":nombre_cat_normal, "Porcentaje":porcentaje}, ignore_index = True)
-                    if comparacion == "IGUAL": #Si coindicen que pare el bucle 
-                        break
-                if comparacion == "IGUAL": #Si coindicen que pare el bucle
+            for docIDsnr in list_DocsID_SNR:
+                if (docIDsnr in list_DocsID_Cat):
+                    indice = list_DocsID_Cat.index(docIDsnr) # indice en lista de documentos para obtener el nombre de Catastro
+                    nombre_cat = list_noms_Catastro[indice]
+                    comparacion = "IGUAL"
                     break
+                else:
+                    comparacion = "DIFERENTE"
                 i += 1
-        
+            
+            if(comparacion != "IGUAL"):
+                # Comparación por nombres
+                i = 0 # Contador para saber si coincide con propietario actual o anterior 
+                for nombre_snr in list_noms_SNR: #Se recorre la lista nombres SNR ordenado por el id anotación (descente)
+                    nombre_snr_normal = self.normalizar(nombre_snr)
+                    for nombre_cat in list_noms_Catastro:
+                        nombre_cat_normal = self.normalizar(nombre_cat)
+                        comparacion, porcentaje = self.comparaNombres(nombre_snr_normal, nombre_cat_normal)
+                        df_comparacion = df_comparacion.append({"Nombre SNR":nombre_snr_normal, "Nombre Catastro":nombre_cat_normal, "Porcentaje":porcentaje}, ignore_index = True)
+                        if comparacion == "IGUAL": #Si coindicen que pare el bucle 
+                            break
+                    if comparacion == "IGUAL": #Si coindicen que pare el bucle
+                        break
+                    i += 1
+            propietarioCatastro = nombre_cat
+            
+        else:
+
+            propietarioCatastro = list_noms_Catastro[0]
+            comparacion = ""
+            
         # Determinando la coincidencia y nombre de propietario catastro
-        propietarioCatastro = nombre_cat
         if (comparacion == "IGUAL" and i == 0):
             coincidePropietario = "0" #Coincide con actual propietario
         elif(comparacion == "IGUAL" and i > 0):
-            coincidePropietario = "2" #Coincide con un propietario anterior
+            
+            if (list_IDanotacion[0] == list_IDanotacion[i]): #Si hay más de un propietario con el mismo ID anotación
+                coincidePropietario = "0" #Coincide con actual propietario
+            else:
+                coincidePropietario = "2" #Coincide con un propietario anterior
+
         else:
             coincidePropietario = "1" #No Coinciden
         
