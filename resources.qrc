@@ -1,0 +1,5 @@
+<RCC>
+    <qresource prefix="/plugins/api_ant/icons" >
+        <file>ant.png</file>
+    </qresource>
+</RCC>

@@ -1,0 +1,5 @@
+<RCC>
+  <qresource prefix="ant_logo">
+    <file>Logo-ANT.png</file>
+  </qresource>
+</RCC>

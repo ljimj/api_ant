@@ -1,0 +1,9 @@
+[general]
+name=api-ant
+description=Análisis Predial Integral
+about=Herramienta para obtener el API automatizado
+version=1.0
+qgisMinimumVersion=3.0
+author=Agencia Nacional de Tierras - Colombia
+email=leonardo.jimenez@ant.gov.co
+repository=https://github.com/ljimj/api_ant.git
