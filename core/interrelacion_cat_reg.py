@@ -1,4 +1,6 @@
-from core.fun_generales import *
+from api_ant.core.fun_generales import *
+import pandas as pd
+
 
 def fmiCat_enSNR(cedCat_fmi_list, gdf_CatUnificado, snr_fmi_list, df_snr, feedback):
     """
@@ -59,6 +61,7 @@ def fmiCat_enSNR(cedCat_fmi_list, gdf_CatUnificado, snr_fmi_list, df_snr, feedba
                 ultimo_propietario_snr = ""
                 cedCat_fmi = ""
                 fmiActivo = ""
+                fmiDireccion = ""
                 # Coincidencia Catastro Registro
                 coincidePropietario = "3" #Sin interrelación
                 propietarioCatastro = list_noms_Catastro.values[0] #Se toma cualquier nombre de la lista de catastro Unificado
@@ -70,6 +73,7 @@ def fmiCat_enSNR(cedCat_fmi_list, gdf_CatUnificado, snr_fmi_list, df_snr, feedba
                 interrelacionCatSNR = "2" #Interrelacion Catastro registro: interrelacion
                 cedCat_fmi = str(df_snr_filterFMI['NROCATASTRO'].values[0])
                 fmiEstado = str(df_snr_filterFMI['ESTADO_FOLIO'].values[0])
+                fmiDireccion = str(df_snr_filterFMI['DIRECCION'].values[0])
                 fmiActivo = fmi_activo(str(fmiEstado))
                 if (len(list_IDanotacion)>0):
                     ultima_IDanotacion = list_IDanotacion.values[0]
@@ -93,6 +97,7 @@ def fmiCat_enSNR(cedCat_fmi_list, gdf_CatUnificado, snr_fmi_list, df_snr, feedba
                 ultimo_propietario_snr = ""
                 cedCat_fmi = ""
                 fmiActivo = ""
+                fmiDireccion = ""
                 # Coincidencia Catastro Registro
                 coincidePropietario = "3" #Sin interrelación
                 propietarioCatastro = str(list_noms_Catastro.values[0]) #Se toma cualquier nombre de la lista de catastro Unificado
@@ -116,7 +121,7 @@ def fmiCat_enSNR(cedCat_fmi_list, gdf_CatUnificado, snr_fmi_list, df_snr, feedba
                     "coincidencia_propietario": coincidePropietario,"area_terreno_r1": area_terreno_igac, 
                     "area_construida_r1":area_construida, 'area_terreno_geografica':area_geografica,
                     "clasificacion_suelo_pot": clasifica_suelo_pot, "ultimo_propietario_fmi": ultimo_propietario_snr, 
-                    "direccion": direccion, "fmi_activo": fmiActivo, "cedula_catastral_fmi": cedCat_fmi, "urbano":urbano
+                    "nombre_predio_catastro": direccion, "nombre_predio_snr": fmiDireccion,"fmi_activo": fmiActivo, "cedula_catastral_fmi": cedCat_fmi, "urbano":urbano
                 }
             df_api = df_api.append(row, ignore_index = True)
         else:
@@ -152,6 +157,7 @@ def Adicion_fmiSNR(df_api, snr_fmi_list, df_snr):
                 ultimo_propietario_snr = ""
             cedCat_fmi = str(df_snr_filterFMI['NROCATASTRO'].values[0])
             fmiEstado = str(df_snr_filterFMI['ESTADO_FOLIO'].values[0])
+            fmiDireccion = str(df_snr_filterFMI['DIRECCION'].values[0])
             fmiActivo = fmi_activo(str(fmiEstado))
             # Coincidencia Catastro Registro
             coincidePropietario = "3" #Sin interrelación
@@ -163,7 +169,7 @@ def Adicion_fmiSNR(df_api, snr_fmi_list, df_snr):
                 "fmi":fmi_snr, "circulo_registral": circulo, "numero_matricula": folio, 
                 "antiguo_sistema_registro": antiguo, "interrelacion_cat_reg": interrelacionCatSNR, 
                 "ultimo_propietario_fmi": ultimo_propietario_snr, "coincidencia_propietario": coincidePropietario, 
-                "fmi_activo": fmiActivo, "cedula_catastral_fmi": cedCat_fmi, "urbano":"NO"
+                "fmi_activo": fmiActivo, "cedula_catastral_fmi": cedCat_fmi, "urbano":"NO", "nombre_predio_snr": fmiDireccion,
             }
             df_api = df_api.append(row, ignore_index = True)
     
@@ -229,11 +235,11 @@ def catastro_SNR(feedback, insumos, gdf_CatUnificado, output):
         Función para cruzar catastro unificado y snr
     """
     #Leyendo Base Registral SNR
-    feedback.pushInfo(" - 4.1 Leyendo Base Registral SNR")
+    print(" - 4.1 Leyendo Base Registral SNR")
     try:
         
         pathSNR = "".join([insumos, "/Base Registral Snr.xlsx"])
-        df_snr = pd.read_excel(pathSNR) #df de SNR
+        df_snr = pd.read_excel(pathSNR, dtype=str) #df de SNR
 
     except:
         pathSNR = "".join([insumos, "/Base Registral Snr.csv"])
@@ -241,7 +247,7 @@ def catastro_SNR(feedback, insumos, gdf_CatUnificado, output):
     
     
     #Quitando espacios y ceros a la izquierda
-    feedback.pushInfo(" - 4.2 Normalizando campos")   
+    print(" - 4.2 Normalizando campos")   
     
     #Normalizando 
     df_snr["MATRICULA"] = df_snr.apply(lambda x: quitar_ceros(x["MATRICULA"]), axis=1)
@@ -251,15 +257,15 @@ def catastro_SNR(feedback, insumos, gdf_CatUnificado, output):
     df_snr["NRO DOCUMENTO"] = df_snr.apply(lambda x: quitar_ceros(x["NRO DOCUMENTO"]), axis=1)
     snr_fmi_list = df_snr["MATRICULA"].unique() #Series de FMI en SNR
 
-    feedback.pushInfo(" - 4.3 Obteniendo los valores unicos (CedulaCatastral-fmi) de Catastro unificado")
+    print(" - 4.3 Obteniendo los valores unicos (CedulaCatastral-fmi) de Catastro unificado")
     gdf_CatUnificado["cedCat_fmi"] = gdf_CatUnificado["numero_predial"].astype(str) + "_" + gdf_CatUnificado["MATRICULA INMOBILIARIA"].astype(str) 
     cedCat_fmi_list = gdf_CatUnificado["cedCat_fmi"].unique() #Lista de FMI en Catastro Unificado
 
-    feedback.pushInfo(" - 4.4 Verificando interrelación catastro Registro")
-    feedback.pushInfo("    - - 4.4.1 Folios de Catastro presentes en SNR (cedula_cat_fmi) - Coincidencia propietario")
+    print(" - 4.4 Verificando interrelación catastro Registro")
+    print("    - - 4.4.1 Folios de Catastro presentes en SNR (cedula_cat_fmi) - Coincidencia propietario")
     df_api1, df_comparacion = fmiCat_enSNR(cedCat_fmi_list, gdf_CatUnificado, snr_fmi_list, df_snr, feedback)
 
-    feedback.pushInfo("    - - 4.4.2 Adicionando folios de SNR que no se relacionan con Catastro (tipo rural y sin info)")
+    print("    - - 4.4.2 Adicionando folios de SNR que no se relacionan con Catastro (tipo rural y sin info)")
     #Filtrando por tipo de predio RURAL Y SIN INFORMACIÓN
     df_snr_rural = df_snr[df_snr["TIPO PREDIO"].str.upper() != "URBANO"]
     snr_fmi_list_rural = df_snr_rural["MATRICULA"].unique()#Lista de FMI en SNR
@@ -269,7 +275,7 @@ def catastro_SNR(feedback, insumos, gdf_CatUnificado, output):
     df_api2["departamento"] = df_api1["departamento"].unique()[0]
     df_api2["municipio"] = df_api1["municipio"].unique()[0]
     
-    feedback.pushInfo(" - 4.5 Folios Matrices y Segregados")
+    print(" - 4.5 Folios Matrices y Segregados")
     fmiListM = df_snr['MATRICULA'].unique() #Lista de todos los FMI existentes en SNR
     fmiListD = df_snr['FOLIO DERIVADO'].unique()
     df_api2[['fmi_matriz', 'fmi_segregado']] = df_api2.apply(lambda x: encontrar_matriz_segregado(x["fmi"], x["urbano"], df_snr, fmiListM, fmiListD), axis=1)
@@ -279,7 +285,7 @@ def catastro_SNR(feedback, insumos, gdf_CatUnificado, output):
     df_api_preliminar = df_api2.replace(to_replace="nan",value="")
 
     # exportando resultado a excel
-    feedback.pushInfo(" - - 4.6 exportando resultado a excel")
+    print(" - - 4.6 exportando resultado a excel")
     xlsPath = output + "/api_preliminar.xlsx"
     df_api_preliminar.to_excel(xlsPath)
 

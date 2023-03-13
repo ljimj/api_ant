@@ -38,7 +38,7 @@ def clasificaSueloPOT(cantidadSuelos, ced30, claseSueloPOT):
     clasificaCedCat = ced30[5:7] #Clasificación del suelo según la cedula catastral posiciones 6-7
 
     if (cantidadSuelos == 1):
-        claseSueloPOT = normalizar(claseSueloPOT[0]) #quitanto tildes, espacios caracteres especiales y pasando a minusculas
+        claseSueloPOT = normalizar(claseSueloPOT.values[0]) #quitanto tildes, espacios caracteres especiales y pasando a minusculas
         if(claseSueloPOT == "rural" and clasificaCedCat != "01" ):
             clasificacionPOT = "0"
         elif(claseSueloPOT == "urbano" and clasificaCedCat == "01" ):
@@ -89,8 +89,7 @@ def crear_base (df, layer):
         area = feat['area_terreno_geografica']
         ced30 = feat['numero_predial'] #de la base inicial antes del intercept 
         ced20 = feat['numero_predial_anterior'] #de la base inicial antes del intercept
-        df_filter = df[df['id_predial'] == id]['clase_suelo'] # Filtrando la información del intercept por id predial
-        claseSueloPOT = df_filter.values.compute() #obteniendo la clase del suelo por predio del intercept
+        claseSueloPOT = df[df['id_predial'] == id]['clase_suelo'] # Filtrando la información del intercept por id predial
         cantidadSuelos = len(claseSueloPOT) # Cuantas clases de suelo que tiene el predio
         clasificacionPOT = clasificaSueloPOT(cantidadSuelos, ced30, claseSueloPOT)
         # Guardando información en la base catastral definitiva
@@ -133,7 +132,7 @@ def baseCatastral_CartoPOT(textEdit, baseCatastral, cartoPOT, output):
         Función para realizar cruce espacial y alfanumerico entre la 
         base catastral y la cartografía POT
     """
-    textEdit.append(" -   1.1 Corrigiendo geometrias y reprojectando CTM12-EPSG:9377 ")
+    print(" -   1.1 Corrigiendo geometrias y reprojectando CTM12-EPSG:9377 ")
     #Corrigiendo geometrias    
     fix_baseC = processing.run("native:fixgeometries", {'INPUT':baseCatastral,'OUTPUT':'TEMPORARY_OUTPUT'})['OUTPUT']
     fix_CartoPot = processing.run("native:fixgeometries", {'INPUT':cartoPOT,'OUTPUT':'TEMPORARY_OUTPUT'})['OUTPUT']
@@ -157,17 +156,17 @@ def baseCatastral_CartoPOT(textEdit, baseCatastral, cartoPOT, output):
     #QgsProject.instance().removeMapLayer(fix_CartoPot)
     
     # Creando el campo 'id_predial' 
-    textEdit.append(" -   1.2 Creando y calculando el campo 'id_predial' y  'area_terreno_geografica' en Base Catastral")
+    print(" -   1.2 Creando y calculando el campo 'id_predial' y  'area_terreno_geografica' en Base Catastral")
     time.sleep(1)
-    textEdit.append(" - - -  Campo 'area_terreno_geografica'")
+    print(" - - -  Campo 'area_terreno_geografica'")
     baseC_rp_f1 = processing.run('native:fieldcalculator', {'FIELD_LENGTH' : 0, 'FIELD_NAME' : 'area_terreno_geografica', 'FIELD_PRECISION' : 0, 'FIELD_TYPE' : 0, 'FORMULA' : 'area($geometry)', 'INPUT' : baseC_rp, 'OUTPUT' : 'TEMPORARY_OUTPUT' })['OUTPUT']
     time.sleep(1)
-    textEdit.append(" - - -  Campo 'id_predial'")
+    print(" - - -  Campo 'id_predial'")
     baseC_rp_f2 = processing.run('native:fieldcalculator',{'FIELD_LENGTH' : 10, 'FIELD_NAME' : 'id_predial', 'FIELD_PRECISION' : 0, 'FIELD_TYPE' : 2, 'FORMULA' : "lpad($id,10,'0')", 'INPUT' : baseC_rp_f1, 'OUTPUT' : 'TEMPORARY_OUTPUT' })['OUTPUT']
     time.sleep(1)
 
     #Intercepcion Base Catastral con Cartografía POT
-    textEdit.append(" -   1.3 Intercepcion Base Catastral con Cartografía POT")
+    print(" -   1.3 Intercepcion Base Catastral con Cartografía POT")
     inputFields = ["numero_predial_anterior", "numero_predial", 'id_predial']
     overlayfields = ["clase_suelo"]
     baseCpot = processing.run("native:intersection",{
@@ -182,7 +181,7 @@ def baseCatastral_CartoPOT(textEdit, baseCatastral, cartoPOT, output):
     QgsProject.instance().addMapLayer(baseCpot)
     
     #Extrayendo información del intercept
-    textEdit.append(" -   1.4 Extrayendo información del intercept")
+    print(" -   1.4 Extrayendo información del intercept")
     cols = ['id_predial', "clase_suelo"] #Nombres columnas que se necesitan
     data = ([f[col] for col in cols] for f in baseCpot.getFeatures()) #Datos
 
@@ -190,13 +189,13 @@ def baseCatastral_CartoPOT(textEdit, baseCatastral, cartoPOT, output):
     df = pd.DataFrame.from_records(data=data, columns=cols)
     
     # Calulando la clasificación suelo POT y exportando Base catastral definitiva
-    textEdit.append(" -   1.5 Calulando la clasificación suelo POT y exportando Base catastral POT")
+    print(" -   1.5 Calulando la clasificación suelo POT y exportando Base catastral POT")
     baseCastastralPOT, gdf_baseCPOT = crear_base(df, baseC_rp_f2)
     
     #Guardando el layer
     path_output = "".join([output, "/base_catastral.gpkg"])
     QgsVectorFileWriter.writeAsVectorFormat(baseCastastralPOT, path_output,'utf-8')
-
+    
     #removiendo los layer temporales de capas reproyectadas
     QgsProject.instance().removeMapLayer(baseC_rp)
     QgsProject.instance().removeMapLayer(CartoPot_rp)
