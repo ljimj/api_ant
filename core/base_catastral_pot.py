@@ -35,7 +35,10 @@ def clasificaSueloPOT(cantidadSuelos, ced30, claseSueloPOT):
         Función para determinar la clasficación de suelo según 
         la cartografía POT y la Cedula catastral
     """
-    clasificaCedCat = ced30[5:7] #Clasificación del suelo según la cedula catastral posiciones 6-7
+    if len(str(ced30)) != 30:
+        clasificaCedCat = ced30[5:7] #ClasificaciÃ³n del suelo segÃºn la cedula catastral posiciones 6-7
+    else:
+        clasificaCedCat = ""
 
     if (cantidadSuelos == 1):
         claseSueloPOT = normalizar(claseSueloPOT.values[0]) #quitanto tildes, espacios caracteres especiales y pasando a minusculas
